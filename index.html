@@ -7,11 +7,30 @@ for(let r=0;r<20;r++)for(let c=0;c<20;c++){let el=document.createElement('div');
 for(const name of names){let el=document.createElement('div');el.className='word';el.dataset.word=normalize(name);el.textContent=name;list.appendChild(el)}
 function update(){cells.forEach(el=>el.classList.remove('found'));for(const word of found){for(const [r,c] of data.placements[word])cells[r*20+c].classList.add('found')}document.querySelectorAll('.word').forEach(el=>el.classList.toggle('done',found.has(el.dataset.word)));document.getElementById('progress').textContent=`${found.size} of 25 found`;document.getElementById('success').classList.toggle('show',found.size===25);try{localStorage.setItem(key,JSON.stringify([...found]))}catch(e){}}
 let start=null;let current=[];function line(a,b){let dr=b.r-a.r,dc=b.c-a.c;let steps=Math.max(Math.abs(dr),Math.abs(dc));if(steps===0)return [[a.r,a.c]];if(!(dr===0||dc===0||Math.abs(dr)===Math.abs(dc)))return [];let sr=Math.sign(dr),sc=Math.sign(dc);return Array.from({length:steps+1},(_,i)=>[a.r+i*sr,a.c+i*sc])}
-function point(e){let el=document.elementFromPoint(e.clientX,e.clientY)?.closest('.cell');if(!el||!board.contains(el))return null;return {r:+el.dataset.r,c:+el.dataset.c}}
+function point(e){
+ const rect=board.getBoundingClientRect();
+ const x=e.clientX-rect.left,y=e.clientY-rect.top;
+ if(x<0||y<0||x>rect.width||y>rect.height)return null;
+ // Use grid coordinates rather than elementFromPoint, which is unreliable during touch capture.
+ const style=getComputedStyle(board);const padL=parseFloat(style.paddingLeft),padT=parseFloat(style.paddingTop);
+ const padR=parseFloat(style.paddingRight),padB=parseFloat(style.paddingBottom);
+ const innerW=rect.width-padL-padR,innerH=rect.height-padT-padB;
+ const c=Math.floor((x-padL)/innerW*20),r=Math.floor((y-padT)/innerH*20);
+ return r>=0&&r<20&&c>=0&&c<20?{r,c}:null;
+}
 function paint(path){cells.forEach(el=>el.classList.remove('selecting'));path.forEach(([r,c])=>cells[r*20+c].classList.add('selecting'))}
-board.addEventListener('pointerdown',e=>{let p=point(e);if(!p)return;e.preventDefault();start=p;current=[[p.r,p.c]];board.setPointerCapture(e.pointerId);paint(current)});
-board.addEventListener('pointermove',e=>{if(!start)return;let p=point(e);if(p){let next=line(start,p);if(next.length){current=next;paint(current)}}});
-function finish(){if(!start)return;let selected=current.map(([r,c])=>data.grid[r][c]).join('');for(let [word,path] of Object.entries(data.placements)){let match=path.length===current.length&&path.every((p,i)=>p[0]===current[i][0]&&p[1]===current[i][1]);let reverse=path.length===current.length&&path.every((p,i)=>p[0]===current[current.length-1-i][0]&&p[1]===current[current.length-1-i][1]);if((match||reverse)&&!found.has(word)){found.add(word);break}}start=null;current=[];paint([]);update()}
-board.addEventListener('pointerup',finish);board.addEventListener('pointercancel',finish);board.addEventListener('lostpointercapture',finish);
+function moveTo(e){if(!start)return;const p=point(e);if(!p)return;const next=line(start,p);if(next.length){current=next;paint(current)}}
+board.addEventListener('pointerdown',e=>{const p=point(e);if(!p)return;e.preventDefault();start=p;current=[[p.r,p.c]];board.setPointerCapture(e.pointerId);paint(current)});
+board.addEventListener('pointermove',e=>{if(start){e.preventDefault();moveTo(e)}});
+function finish(e){if(!start)return;if(e&&e.type==='pointerup')moveTo(e);
+ for(const [word,path] of Object.entries(data.placements)){
+  const match=path.length===current.length&&path.every((p,i)=>p[0]===current[i][0]&&p[1]===current[i][1]);
+  const reverse=path.length===current.length&&path.every((p,i)=>p[0]===current[current.length-1-i][0]&&p[1]===current[current.length-1-i][1]);
+  if((match||reverse)&&!found.has(word)){found.add(word);break}
+ }
+ start=null;current=[];paint([]);update();
+}
+board.addEventListener('pointerup',finish);
+board.addEventListener('pointercancel',()=>{start=null;current=[];paint([])});
 document.getElementById('reset').onclick=()=>{if(confirm('Start the puzzle over?')){found.clear();update()}};update();
 </script></body></html>
